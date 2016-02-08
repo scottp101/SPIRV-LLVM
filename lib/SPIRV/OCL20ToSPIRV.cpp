@@ -797,6 +797,13 @@ void OCL20ToSPIRV::visitCallGroupBuiltin(CallInst* CI,
   auto F = CI->getCalledFunction();
   std::vector<int> PreOps;
   std::string DemangledName = OrigDemangledName;
+
+  bool IsGroupAllAny =
+      (DemangledName == kOCLBuiltinName::WorkGroupAll ||
+       DemangledName == kOCLBuiltinName::WorkGroupAny ||
+       DemangledName == kOCLBuiltinName::SubGroupAll  ||
+       DemangledName == kOCLBuiltinName::SubGroupAny);
+
   if (DemangledName == kOCLBuiltinName::WorkGroupBarrier)
     return;
   if (DemangledName == kOCLBuiltinName::WaitGroupEvent) {
@@ -841,10 +848,21 @@ void OCL20ToSPIRV::visitCallGroupBuiltin(CallInst* CI,
       return false; // break out of loop
     });
   }
+
   auto Consts = getInt32(M, PreOps);
   OCLBuiltinTransInfo Info;
+  if (IsGroupAllAny)
+  {
+      Info.RetTy = Type::getInt1Ty(*Ctx);
+  }
   Info.UniqName = DemangledName;
-  Info.PostProc = [=](std::vector<Value *> &Ops){
+  Info.PostProc = [=](std::vector<Value *> &Ops) {
+    if (IsGroupAllAny)
+    {
+        IRBuilder<> IRB(CI);
+        Ops[0] = IRB.CreateICmpNE(Ops[0],
+            ConstantInt::get(Type::getInt32Ty(*Ctx), 0));
+    }
     size_t E = Ops.size();
     if (DemangledName == "group_broadcast" && E > 2) {
       assert (E == 3 || E == 4);
@@ -880,8 +898,16 @@ OCL20ToSPIRV::transBuiltin(CallInst* CI,
         return Info.UniqName + Info.Postfix;
       },
       [=](CallInst *NewCI) -> Instruction * {
-        return CastInst::CreatePointerBitCastOrAddrSpaceCast(NewCI,
-            CI->getType(), "", CI);
+        if (NewCI->getType()->isIntegerTy() && CI->getType()->isIntegerTy())
+        {
+            return CastInst::CreateIntegerCast(NewCI, CI->getType(),
+                Info.isRetSigned, "", CI);
+        }
+        else
+        {
+            return CastInst::CreatePointerBitCastOrAddrSpaceCast(NewCI,
+                CI->getType(), "", CI);
+        }
       },
     &Attrs);
 }
