@@ -582,8 +582,17 @@ LLVMToSPIRV::transConstant(Value *V) {
     return BM->addNullConstant(transType(CAZero->getType()));
 
   if (auto ConstI = dyn_cast<ConstantInt>(V)) {
-    SPIRVTypeInt *BT = static_cast<SPIRVTypeInt *>(transType(V->getType()));
-    return BM->addIntegerConstant(BT, ConstI->getZExtValue());
+    auto *BT = transType(V->getType());
+    if (BT->isTypeBool())
+    {
+        return BM->addConstant(BT, ConstI->getZExtValue());
+    }
+    else
+    {
+        return BM->addIntegerConstant(
+            static_cast<SPIRVTypeInt *>(BT),
+            ConstI->getZExtValue());
+    }
   }
 
   if (auto ConstFP = dyn_cast<ConstantFP>(V)) {
@@ -1406,12 +1415,9 @@ LLVMToSPIRV::transBuiltinToInstWithoutDecoration(Op OC,
         getArgAsInt(CI, 2), BB);
     break;
   case OpGroupAsyncCopy: {
-    auto Args = getArguments(CI, 1);
-    auto BArgs = transValue(Args, BB);
-    return BM->addAsyncGroupCopy(
-        getArgAsScope(CI, 0),
-        BArgs[0], BArgs[1], BArgs[2],
-        BArgs[3], BArgs[4], BB);
+    auto BArgs = transValue(getArguments(CI), BB);
+    return BM->addAsyncGroupCopy(BArgs[0], BArgs[1], BArgs[2], BArgs[3],
+                                 BArgs[4], BArgs[5], BB);
     }
     break;
   default: {

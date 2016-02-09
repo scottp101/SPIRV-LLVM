@@ -215,7 +215,7 @@ public:
   // Instruction creation functions
   virtual SPIRVInstruction *addPtrAccessChainInst(SPIRVType *, SPIRVValue *,
       std::vector<SPIRVValue *>, SPIRVBasicBlock *, bool);
-  virtual SPIRVInstruction *addAsyncGroupCopy(Scope Scope,
+  virtual SPIRVInstruction *addAsyncGroupCopy(SPIRVValue *Scope,
       SPIRVValue *Dest, SPIRVValue *Src, SPIRVValue *NumElems, SPIRVValue *Stride,
       SPIRVValue *Event, SPIRVBasicBlock *BB);
   virtual SPIRVInstruction *addExtInst(SPIRVType *,
@@ -786,9 +786,9 @@ SPIRVValue *
 SPIRVModuleImpl::addConstant(SPIRVType *Ty, uint64_t V) {
   if (Ty->isTypeBool()) {
     if (V)
-      return new SPIRVConstantTrue(this, Ty, getId());
+      return addConstant(new SPIRVConstantTrue(this, Ty, getId()));
     else
-      return new SPIRVConstantFalse(this, Ty, getId());
+      return addConstant(new SPIRVConstantFalse(this, Ty, getId()));
   }
   return addConstant(new SPIRVConstant(this, Ty, getId(), V));
 }
@@ -997,7 +997,7 @@ SPIRVModuleImpl::addPtrAccessChainInst(SPIRVType *Type, SPIRVValue *Base,
 }
 
 SPIRVInstruction *
-SPIRVModuleImpl::addAsyncGroupCopy(Scope Scope,
+SPIRVModuleImpl::addAsyncGroupCopy(SPIRVValue *Scope,
     SPIRVValue *Dest, SPIRVValue *Src, SPIRVValue *NumElems, SPIRVValue *Stride,
     SPIRVValue *Event, SPIRVBasicBlock *BB) {
   return addInstruction(new SPIRVGroupAsyncCopy(Scope, getId(), Dest, Src,
