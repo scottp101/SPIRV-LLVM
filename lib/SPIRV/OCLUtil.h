@@ -144,6 +144,7 @@ namespace kOCLBuiltinName {
   const static char AtomicInit[]         = "atomic_init";
   const static char AtomicWorkItemFence[] = "atomic_work_item_fence";
   const static char Barrier[]            = "barrier";
+  const static char Clamp[]              = "clamp";
   const static char ConvertPrefix[]      = "convert_";
   const static char Dot[]                = "dot";
   const static char EnqueueKernel[]      = "enqueue_kernel";
@@ -153,7 +154,10 @@ namespace kOCLBuiltinName {
   const static char GetImageDim[]        = "get_image_dim";
   const static char GetImageHeight[]     = "get_image_height";
   const static char GetImageWidth[]      = "get_image_width";
+  const static char Max[]                = "max";
   const static char MemFence[]           = "mem_fence";
+  const static char Min[]                = "min";
+  const static char Mix[]                = "mix";
   const static char NDRangePrefix[]      = "ndrange_";
   const static char Pipe[]               = "pipe";
   const static char Prefetch[]           = "prefetch";
@@ -162,6 +166,8 @@ namespace kOCLBuiltinName {
   const static char RoundingPrefix[]     = "_r";
   const static char Sampled[]            = "sampled_";
   const static char SampledReadImage[]   = "sampled_read_image";
+  const static char SmoothStep[]         = "smoothstep";
+  const static char Step[]               = "step";
   const static char SubGroupPrefix[]     = "sub_group_";
   const static char SubPrefix[]          = "sub_";
   const static char ToGlobal[]           = "to_global";

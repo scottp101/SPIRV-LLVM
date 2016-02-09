@@ -222,6 +222,8 @@ public:
 
   void visitCallPrefetch(CallInst *CI, StringRef MangledName, const std::string& DemangledName);
   
+  void visitCallScalToVec(CallInst* CI, StringRef MangledName, const std::string& DemangledName);
+
   void visitDbgInfoIntrinsic(DbgInfoIntrinsic &I){
     I.dropAllReferences();
     I.eraseFromParent();
@@ -440,6 +442,15 @@ OCL20ToSPIRV::visitCallInst(CallInst& CI) {
   }
   if (DemangledName == kOCLBuiltinName::Prefetch){
     visitCallPrefetch(&CI, MangledName, DemangledName);
+    return;
+  }
+  if ( DemangledName == kOCLBuiltinName::Min ||
+       DemangledName == kOCLBuiltinName::Max ||
+       DemangledName == kOCLBuiltinName::Step ||
+       DemangledName == kOCLBuiltinName::SmoothStep ||
+       DemangledName == kOCLBuiltinName::Clamp ||
+       DemangledName == kOCLBuiltinName::Mix) {
+      visitCallScalToVec(&CI, MangledName, DemangledName);
     return;
   }
   visitCallBuiltinSimple(&CI, MangledName, DemangledName);
@@ -1197,6 +1208,71 @@ OCL20ToSPIRV::visitCallPrefetch(CallInst* CI, StringRef MangledName, const std::
         Args[0] = CI->getOperand(1);
         Args[1] = CI->getOperand(0);
         return kOCLBuiltinName::Prefetch;
+    }, &Attrs);
+}
+
+void OCL20ToSPIRV::visitCallScalToVec(CallInst* CI, StringRef MangledName, const std::string& DemangledName){
+
+    bool temp = false;
+    bool new_temp = false;
+    std::vector<unsigned int> vec_pos;
+    std::vector<unsigned int> scalar_pos;
+    for (unsigned I = 0, E = CI->getNumArgOperands(); I != E; ++I) {
+        new_temp = temp;
+        temp = isa<VectorType>(CI->getOperand(I)->getType());
+        if (I > 0 && new_temp != temp) {
+            break;
+        }
+        if (I == E - 1){
+            visitCallBuiltinSimple(CI, MangledName, DemangledName);
+            return;
+        }
+    }
+
+    if (DemangledName == kOCLBuiltinName::Min || DemangledName == kOCLBuiltinName::Max)
+    {
+        vec_pos.push_back(0); scalar_pos.push_back(1);
+    }
+    else if (DemangledName == kOCLBuiltinName::Clamp)
+    {
+        vec_pos.push_back(0); scalar_pos.push_back(1); scalar_pos.push_back(2);
+    }
+    else if (DemangledName == kOCLBuiltinName::Mix)
+    {
+        vec_pos.push_back(0); vec_pos.push_back(1); scalar_pos.push_back(2);
+    }
+    else if (DemangledName == kOCLBuiltinName::Step)
+    {
+        vec_pos.push_back(1); scalar_pos.push_back(0);
+    }
+    else if (DemangledName == kOCLBuiltinName::SmoothStep)
+    {
+        vec_pos.push_back(2); scalar_pos.push_back(0); scalar_pos.push_back(1);
+    }
+
+    AttributeSet Attrs = CI->getCalledFunction()->getAttributes();
+    mutateCallInstSPIRV(M, CI, [=](CallInst *, std::vector<Value *> &Args){
+
+        auto vec_size = CI->getOperand(vec_pos.at(0))->getType()->getVectorNumElements();
+        for (unsigned I = 0, Vsize = vec_pos.size(); I != Vsize; ++I){
+            Args[vec_pos.at(I)] = CI->getOperand(vec_pos.at(I));
+        }
+        
+        for (unsigned I = 0, Ssize = scalar_pos.size(); I != Ssize; ++I){
+            Instruction *Inst = InsertElementInst::Create(UndefValue::get(CI->getOperand(vec_pos.at(0))->getType()),
+                                                          CI->getOperand(scalar_pos.at(I)),
+                                                          getInt32(M, 0),
+                                                          "",
+                                                          CI);
+            Value *NewVec = new ShuffleVectorInst(Inst,
+                                                  UndefValue::get(CI->getOperand(vec_pos.at(0))->getType()),
+                                                  ConstantVector::getSplat(vec_size, getInt32(M, 0)),
+                                                  "",
+                                                  CI);
+
+            Args[scalar_pos.at(I)] = NewVec;
+        }
+        return getSPIRVExtFuncName(SPIRVEIS_OpenCL, getExtOp(MangledName, DemangledName));
     }, &Attrs);
 }
 
