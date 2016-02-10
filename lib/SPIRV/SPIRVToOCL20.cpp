@@ -334,7 +334,9 @@ void SPIRVToOCL20::visitCallSPRIVImageQuerySize(CallInst *CI) {
 
 void SPIRVToOCL20::visitCallSPIRVAtomicBuiltin(CallInst* CI, Op OC) {
   AttributeSet Attrs = CI->getCalledFunction()->getAttributes();
-  mutateCallInstOCL(M, CI, [=](CallInst *, std::vector<Value *> &Args){
+  Instruction * pInsertBefore = CI;
+
+  mutateCallInstOCL(M, CI, [=](CallInst *, std::vector<Value *> &Args, Type *& RetTy){
     auto Ptr = findFirstPtr(Args);
     auto Name = OCLSPIRVBuiltinMap::rmap(OC);
     auto NumOrder = getAtomicBuiltinNumMemoryOrderArgs(Name);
@@ -354,9 +356,41 @@ void SPIRVToOCL20::visitCallSPIRVAtomicBuiltin(CallInst* CI, Op OC) {
         return mapSPIRVMemOrderToOCL(Ord);
       });
       std::swap(Args[ScopeIdx], Args.back());
+
+      if(OC == OpAtomicCompareExchange ||
+         OC == OpAtomicCompareExchangeWeak) {
+        // OpAtomicCompareExchange[Weak] semantics is different from
+        // atomic_compare_exchange_[strong|weak] semantics as well as
+        // arguments order.
+        // OCL built-ins returns boolean value and stores a new/original
+        // value by pointer passed as 2nd argument (aka expected) while SPIR-V
+        // instructions returns this new/original value as a resulting value.
+        AllocaInst *pExpected = new AllocaInst(CI->getType(), "expected", pInsertBefore);
+        pExpected->setAlignment(CI->getType()->getScalarSizeInBits() / 8);
+        new StoreInst(Args[1], pExpected, pInsertBefore);
+        Args[1] = pExpected;
+        std::swap(Args[3], Args[4]);
+        std::swap(Args[2], Args[3]);
+
+        RetTy = Type::getInt1Ty(*Ctx);
+      }
     }
     return Name;
-  }, &Attrs);
+  },
+  [=](CallInst * CI) -> Instruction * {
+    if(OC == OpAtomicCompareExchange ||
+       OC == OpAtomicCompareExchangeWeak) {
+      // OCL built-ins atomic_compare_exchange_[strong|weak] return boolean value. So,
+      // to obtain the same value as SPIR-V instruction is returning it has to be loaded
+      // from the memory where 'expected' value is stored. This memory must contain the
+      // needed value after a call to OCL built-in is completed.
+      LoadInst * pOriginal = new LoadInst(CI->getArgOperand(1), "original", pInsertBefore);
+      return pOriginal;
+    }
+    // For other built-ins the return values match.
+    return CI;
+  },
+  &Attrs);
 }
 
 void SPIRVToOCL20::visitCallSPIRVBuiltin(CallInst* CI, Op OC) {
