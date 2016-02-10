@@ -1238,7 +1238,7 @@ OCL20ToSPIRV::visitCallPrefetch(CallInst* CI, StringRef MangledName, const std::
     mutateCallInstSPIRV(M, CI, [=](CallInst *, std::vector<Value *> &Args){
         Args[0] = CI->getOperand(1);
         Args[1] = CI->getOperand(0);
-        return kOCLBuiltinName::Prefetch;
+        return getSPIRVExtFuncName(SPIRVEIS_OpenCL, getExtOp(MangledName, DemangledName));
     }, &Attrs);
 }
 
