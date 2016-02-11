@@ -447,7 +447,9 @@ OCL20ToSPIRV::visitCallInst(CallInst& CI) {
     visitCallPrefetch(&CI, MangledName, DemangledName);
     return;
   }
-  if ( DemangledName == kOCLBuiltinName::Min ||
+  if ( DemangledName == kOCLBuiltinName::Fmin ||
+       DemangledName == kOCLBuiltinName::Fmax ||
+       DemangledName == kOCLBuiltinName::Min ||
        DemangledName == kOCLBuiltinName::Max ||
        DemangledName == kOCLBuiltinName::Step ||
        DemangledName == kOCLBuiltinName::SmoothStep ||
@@ -1226,7 +1228,10 @@ void OCL20ToSPIRV::visitCallScalToVec(CallInst* CI, StringRef MangledName, const
         }
     }
 
-    if (DemangledName == kOCLBuiltinName::Min || DemangledName == kOCLBuiltinName::Max)
+    if (DemangledName == kOCLBuiltinName::Min || 
+        DemangledName == kOCLBuiltinName::Max ||
+        DemangledName == kOCLBuiltinName::Fmin || 
+        DemangledName == kOCLBuiltinName::Fmax )
     {
         vec_pos.push_back(0); scalar_pos.push_back(1);
     }

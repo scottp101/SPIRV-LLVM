@@ -151,6 +151,8 @@ namespace kOCLBuiltinName {
   const static char ConvertPrefix[]      = "convert_";
   const static char Dot[]                = "dot";
   const static char EnqueueKernel[]      = "enqueue_kernel";
+  const static char Fmax[]               = "fmax";
+  const static char Fmin[]               = "fmin";
   const static char GetFence[]           = "get_fence";
   const static char GetImageArraySize[]  = "get_image_array_size";
   const static char GetImageDepth[]      = "get_image_depth";
