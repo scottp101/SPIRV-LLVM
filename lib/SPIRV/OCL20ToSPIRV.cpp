@@ -114,6 +114,8 @@ public:
   // some extra code is emitted to convert between the two.
   void visitCallAllAny(spv::Op OC, CallInst *CI);
 
+  void visitBoolifyReturn(const std::string &DemangledName, CallInst *CI);
+
   /// Transform atomic_* to __spirv_Atomic*.
   /// atomic_x(ptr_arg, args, order, scope) =>
   ///   __spirv_AtomicY(ptr_arg, map(order), map(scope), args)
@@ -355,6 +357,10 @@ OCL20ToSPIRV::visitCallInst(CallInst& CI) {
   }
   if (DemangledName == kOCLBuiltinName::Any) {
       visitCallAllAny(OpAny, &CI);
+      return;
+  }
+  if (DemangledName == kOCLBuiltinName::SignBit) {
+      visitBoolifyReturn(DemangledName, &CI);
       return;
   }
   if (DemangledName.find(kOCLBuiltinName::AsyncWorkGroupCopy) == 0 ||
@@ -599,6 +605,21 @@ OCL20ToSPIRV::visitCallAllAny(spv::Op OC, CallInst* CI) {
         },
         &Attrs);
   }
+}
+
+// Handles the OCL functions that return int|intn that have corresponding
+// bool|booln SPIRV opcodes.
+void
+OCL20ToSPIRV::visitBoolifyReturn(const std::string &DemangledName, CallInst* CI)
+{
+  OCLBuiltinTransInfo Info;
+  bool isVec = CI->getType()->isVectorTy();
+  Info.RetTy = !isVec ? cast<Type>(Type::getInt1Ty(*Ctx)) :
+      cast<Type>(VectorType::get(Type::getInt1Ty(*Ctx),
+        CI->getType()->getVectorNumElements()));
+  Info.UniqName = DemangledName;
+  Info.isRetSigned = isVec;
+  transBuiltin(CI, Info);
 }
 
 void
@@ -929,7 +950,11 @@ OCL20ToSPIRV::transBuiltin(CallInst* CI,
         return Info.UniqName + Info.Postfix;
       },
       [=](CallInst *NewCI) -> Instruction * {
-        if (NewCI->getType()->isIntegerTy() && CI->getType()->isIntegerTy())
+        auto IntVec = [](Type* Ty) {
+            return Ty->isVectorTy() && Ty->isIntOrIntVectorTy();
+        };
+        if ((NewCI->getType()->isIntegerTy() && CI->getType()->isIntegerTy()) ||
+            (IntVec(NewCI->getType()) && IntVec(CI->getType())))
         {
             return CastInst::CreateIntegerCast(NewCI, CI->getType(),
                 Info.isRetSigned, "", CI);
