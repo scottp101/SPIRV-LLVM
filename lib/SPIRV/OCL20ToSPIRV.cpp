@@ -230,6 +230,13 @@ public:
   void visitCallForUnaryIntAsBool(CallInst *CI, StringRef MangledName,const std::string &DemangledName);
 
   void visitCallPrefetch(CallInst *CI, StringRef MangledName, const std::string& DemangledName);
+
+  /// Transforms get_mem_fence built-in to SPIR-V function and aligns result values with SPIR 1.2.
+  /// get_mem_fence(ptr) => __spirv_GenericPtrMemSemantics
+  /// GenericPtrMemSemantics valid values are 0x100, 0x200 and 0x300, where is
+  /// SPIR 1.2 defines them as 0x1, 0x2 and 0x3, so this function adjusts
+  /// GenericPtrMemSemantics results to SPIR 1.2 values.
+  void visitCallGetFence(CallInst *CI, StringRef MangledName, const std::string& DemangledName);
   
   void visitCallScalToVec(CallInst* CI, StringRef MangledName, const std::string& DemangledName);
 
@@ -447,20 +454,23 @@ OCL20ToSPIRV::visitCallInst(CallInst& CI) {
     return;
   }
   if (DemangledName == kOCLBuiltinName::Dot &&
-      !isa<VectorType>(CI.getOperand(0)->getType())){
-      visitCallDot(&CI);
-      return;
+      !isa<VectorType>(CI.getOperand(0)->getType())) {
+    visitCallDot(&CI);
+    return;
   }
-   if (DemangledName == kOCLBuiltinName::IsFinite ||
+  if (DemangledName == kOCLBuiltinName::IsFinite ||
       DemangledName == kOCLBuiltinName::IsInf ||
       DemangledName == kOCLBuiltinName::IsNan ||
-      DemangledName == kOCLBuiltinName::IsNormal )
-  {
+      DemangledName == kOCLBuiltinName::IsNormal) {
     visitCallForUnaryIntAsBool(&CI, MangledName, DemangledName);
     return;
   }
-  if (DemangledName == kOCLBuiltinName::Prefetch){
+  if (DemangledName == kOCLBuiltinName::Prefetch) {
     visitCallPrefetch(&CI, MangledName, DemangledName);
+    return;
+  }
+  if (DemangledName == kOCLBuiltinName::GetFence) {
+    visitCallGetFence(&CI, MangledName, DemangledName);
     return;
   }
   if ( DemangledName == kOCLBuiltinName::Fmin ||
@@ -1257,6 +1267,20 @@ OCL20ToSPIRV::visitCallPrefetch(CallInst* CI, StringRef MangledName, const std::
         Args[1] = CI->getOperand(0);
         return getSPIRVExtFuncName(SPIRVEIS_OpenCL, getExtOp(MangledName, DemangledName));
     }, &Attrs);
+}
+
+void OCL20ToSPIRV::visitCallGetFence(CallInst *CI, StringRef MangledName,
+                                     const std::string &DemangledName) {
+  AttributeSet Attrs = CI->getCalledFunction()->getAttributes();
+  Op OC = OpNop;
+  OCLSPIRVBuiltinMap::find(DemangledName, &OC);
+  std::string SPIRVName = getSPIRVFuncName(OC);
+  mutateCallInstSPIRV(M, CI, [=](CallInst *, std::vector<Value *> &Args,
+                                 Type *&Ret) { return SPIRVName; },
+            [=](CallInst *NewCI) -> Instruction * {
+              return BinaryOperator::CreateLShr(NewCI, getInt32(M, 8), "", CI);
+            },
+            &Attrs);
 }
 
 void OCL20ToSPIRV::visitCallScalToVec(CallInst* CI, StringRef MangledName, const std::string& DemangledName){
