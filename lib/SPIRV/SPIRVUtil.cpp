@@ -513,11 +513,19 @@ isMangledTypeSigned(char Mangled) {
       || Mangled == 'l' /* long */;
 }
 
-// Check if a mangled type name is floating point
+// Check if a mangled type name is floating point (excludes half)
 bool
 isMangledTypeFP(char Mangled) {
-  return Mangled == 'f' /* float */
-      || Mangled == 'd'; /* double */
+    return Mangled == 'f' /* float */
+        || Mangled == 'd';/* double */
+
+}
+
+// Check if a mangled type name is half 
+bool 
+isMangledTypeHalf(std::string Mangled)
+{
+    return Mangled == "Dh"; /* half */
 }
 
 void
@@ -534,18 +542,19 @@ ParamType LastFuncParamType(const std::string& MangledName)
   auto Copy = MangledName;
   eraseSubstitutionFromMangledName(Copy);
   char Mangled = Copy.back();
+  std::string Mangled2 = Copy.substr(Copy.size()-2);
 
-  if (isMangledTypeUnsigned(Mangled))
+  if (isMangledTypeFP(Mangled) || isMangledTypeHalf(Mangled2))
+  {
+      return ParamType::FLOAT;
+  }
+  else if (isMangledTypeUnsigned(Mangled))
   {
       return ParamType::UNSIGNED;
   }
   else if (isMangledTypeSigned(Mangled))
   {
       return ParamType::SIGNED;
-  }
-  else if (isMangledTypeFP(Mangled))
-  {
-      return ParamType::FLOAT;
   }
 
   return ParamType::UNKNOWN;
