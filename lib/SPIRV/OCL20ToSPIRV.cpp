@@ -227,8 +227,6 @@ public:
   /// Transforms OpDot instructions with a scalar type to a fmul instruction
   void visitCallDot(CallInst *CI);
 
-  void visitCallForUnaryIntAsBool(CallInst *CI, StringRef MangledName,const std::string &DemangledName);
-
   void visitCallPrefetch(CallInst *CI, StringRef MangledName, const std::string& DemangledName);
 
   /// Transforms get_mem_fence built-in to SPIR-V function and aligns result values with SPIR 1.2.
@@ -366,7 +364,11 @@ OCL20ToSPIRV::visitCallInst(CallInst& CI) {
       visitCallAllAny(OpAny, &CI);
       return;
   }
-  if (DemangledName == kOCLBuiltinName::SignBit) {
+  if (DemangledName == kOCLBuiltinName::SignBit  ||
+      DemangledName == kOCLBuiltinName::IsFinite ||
+      DemangledName == kOCLBuiltinName::IsInf    ||
+      DemangledName == kOCLBuiltinName::IsNan    ||
+      DemangledName == kOCLBuiltinName::IsNormal) {
       visitBoolifyReturn(DemangledName, &CI);
       return;
   }
@@ -456,13 +458,6 @@ OCL20ToSPIRV::visitCallInst(CallInst& CI) {
   if (DemangledName == kOCLBuiltinName::Dot &&
       !isa<VectorType>(CI.getOperand(0)->getType())) {
     visitCallDot(&CI);
-    return;
-  }
-  if (DemangledName == kOCLBuiltinName::IsFinite ||
-      DemangledName == kOCLBuiltinName::IsInf ||
-      DemangledName == kOCLBuiltinName::IsNan ||
-      DemangledName == kOCLBuiltinName::IsNormal) {
-    visitCallForUnaryIntAsBool(&CI, MangledName, DemangledName);
     return;
   }
   if (DemangledName == kOCLBuiltinName::Prefetch) {
@@ -1219,44 +1214,6 @@ OCL20ToSPIRV::visitCallDot(CallInst* CI){
     CI->replaceAllUsesWith(FMulVal);
     CI->dropAllReferences();
     CI->removeFromParent();
-}
-
-void OCL20ToSPIRV::visitCallForUnaryIntAsBool(CallInst *CI, StringRef MangledName,
-  const std::string &DemangledName) {
-
-  std::vector<Type *> ArgTys;
-  std::vector<Value*> Args;
-  for (size_t I = 0, E = CI->getNumArgOperands(); I != E; ++I) {
-    ArgTys.push_back(CI->getArgOperand(I)->getType());
-    Args.push_back(CI->getArgOperand(I));
-  }
-
-  spv::Op OC = OpNop;
-  
-  if(DemangledName == kOCLBuiltinName::IsFinite) OC = OpIsFinite;
-  if(DemangledName == kOCLBuiltinName::IsInf) OC = OpIsInf;
-  if(DemangledName == kOCLBuiltinName::IsNan) OC = OpIsNan;
-  if(DemangledName == kOCLBuiltinName::IsNormal) OC = OpIsNormal;
-
-  assert( OC != OpNop && "Invalid OC in visitCallForUnaryIntAsBool");
-
-  BuiltinFuncMangleInfo mangler;
-  AttributeSet AS = CI->getCalledFunction()->getAttributes();
-
-  CallInst* CallInst = 
-    addCallInst(M, getSPIRVFuncName(OC), Type::getInt1Ty(M->getContext()), Args, 
-    &AS, 
-    CI, 
-    &mangler);
-
-  auto Ty = CI->getType();
-  auto Zero = getScalarOrVectorConstantInt(Ty, 0, false);
-  auto One = getScalarOrVectorConstantInt(Ty, 1, false);
-  auto Sel = SelectInst::Create(CallInst, One, Zero, "");
-    
-  Sel->insertAfter(CallInst);
-  CI->replaceAllUsesWith(Sel);
-  CI->eraseFromParent();
 }
 
 void
