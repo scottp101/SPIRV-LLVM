@@ -776,6 +776,10 @@ isMangledTypeSigned(char Mangled);
 bool
 isMangledTypeFP(char Mangled);
 
+// Check if a mangled type name is half
+bool
+isMangledTypeHalf(std::string Mangled);
+
 // Check if \param I is valid vector size: 2, 3, 4, 8, 16.
 bool
 isValidVectorSize(unsigned I);
