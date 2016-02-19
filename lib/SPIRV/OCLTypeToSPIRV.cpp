@@ -79,6 +79,8 @@ OCLTypeToSPIRV::runOnModule(Module& Module) {
   for (auto &F:Module.functions())
     adaptArgumentsByMetadata(&F);
 
+  adaptArgumentsBySamplerUse(Module);
+
   while (!WorkSet.empty()) {
     Function *F = *WorkSet.begin();
     WorkSet.erase(WorkSet.begin());
@@ -113,6 +115,17 @@ getArgIndex(CallInst *CI, Value *V) {
       return AI;
   }
   llvm_unreachable("Not argument of function call");
+}
+
+/// Find index of \param V as argument of function call \param CI.
+static unsigned
+getArgIndex(Function *F, Value *V) {
+  auto A = F->arg_begin(), E = F->arg_end();
+  for (unsigned I = 0; A != E; ++I, ++A) {
+    if (A == V)
+      return I;
+  }
+  llvm_unreachable("Not argument of function");
 }
 
 /// Get i-th argument of a function.
@@ -210,6 +223,60 @@ OCLTypeToSPIRV::getArgMetadata(Function *F, const std::string &MDName) {
 MDNode *
 OCLTypeToSPIRV::getArgBaseTypeMetadata(Function *F) {
   return getArgMetadata(F, SPIR_MD_KERNEL_ARG_BASE_TYPE);
+}
+
+// Handle functions with sampler arguments that don't get called by
+// a kernel function.
+void OCLTypeToSPIRV::adaptArgumentsBySamplerUse(Module &M)
+{
+    SmallPtrSet<Function*, 5> processed;
+
+    std::function<void(Function*, unsigned)> TraceArg = [&](Function *F, unsigned idx)
+    {
+        // If we have cycles in the call graph in the future, bail out
+        // if we've already processed this function.
+        if (processed.insert(F).second == false)
+            return;
+
+        for (auto U : F->users())
+        {
+            if (auto *CI = dyn_cast<CallInst>(U))
+            {
+                auto SamplerArg = CI->getArgOperand(idx);
+
+                if (!isa<Argument>(SamplerArg))
+                    continue;
+
+                // Already traced this, move on.
+                if (AdaptedTy.count(SamplerArg) != 0)
+                    continue;
+
+                addAdaptedType(SamplerArg,
+                    getOrCreateOpaquePtrType(&M, kSPR2TypeName::Sampler));
+
+                auto Caller = cast<Argument>(SamplerArg)->getParent();
+                addWork(Caller);
+
+                TraceArg(Caller, getArgIndex(Caller, SamplerArg));
+            }
+        }
+    };
+
+    for (auto &F : M)
+    {
+        if (F.empty()) // decl
+        {
+            auto MangledName = F.getName();
+            std::string DemangledName;
+            if (!oclIsBuiltin(MangledName, 12, &DemangledName, false))
+                continue;
+
+            if (DemangledName.find(kSPIRVName::SampledImage) == std::string::npos)
+                continue;
+
+            TraceArg(&F, 1);
+        }
+    }
 }
 
 void
