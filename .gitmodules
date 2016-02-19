@@ -1,0 +1,7 @@
+[submodule "SPIR"]
+	path = SPIR
+	url = https://github.com/KhronosGroup/SPIR.git
+[submodule "tools/clang"]
+	path = tools/clang
+	url = https://github.com/KhronosGroup/SPIR.git
+	branch = spirv-1.0
