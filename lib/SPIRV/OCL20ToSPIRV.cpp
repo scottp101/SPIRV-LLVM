@@ -524,7 +524,7 @@ OCL20ToSPIRV::visitCallNDRange(CallInst *CI,
     default:
       assert(0 && "Invalid number of arguments");
     }
-    return getSPIRVFuncName(OpBuildNDRange);
+    return getSPIRVFuncName(OpBuildNDRange, "_" + std::to_string(Len) + "D");
   }, &Attrs);
 }
 
