@@ -189,12 +189,15 @@ public:
       const SPIRVTypeImageDescriptor &, SPIRVAccessQualifierKind);
   virtual SPIRVTypeSampler *addSamplerType();
   virtual SPIRVTypeSampledImage *addSampledImageType(SPIRVTypeImage *T);
-  virtual SPIRVTypeStruct *addStructType(const std::vector<SPIRVType *>&,
-      const std::string &, bool);
+  virtual SPIRVTypeStruct *openStructType(
+      const std::vector<SPIRVType *>&,
+      const std::string &);
+  virtual void closeStructType(SPIRVTypeStruct *T, bool);
   virtual SPIRVTypeVector *addVectorType(SPIRVType *, SPIRVWord);
   virtual SPIRVType *addOpaqueGenericType(Op);
   virtual SPIRVTypePipe *addPipeType();
   virtual SPIRVTypeVoid *addVoidType();
+  virtual void createForwardPointers();
 
   // Constant creation functions
   virtual SPIRVInstruction *addBranchInst(SPIRVLabel *, SPIRVBasicBlock *);
@@ -305,6 +308,7 @@ private:
   typedef std::vector<SPIRVId> SPIRVIdVec;
   typedef std::vector<SPIRVFunction *> SPIRVFunctionVector;
   typedef std::vector<SPIRVType *> SPIRVTypeVec;
+  typedef std::vector<SPIRVTypeForwardPointer *> SPIRVForwardPointerVec;
   typedef std::vector<SPIRVValue *> SPIRVConstantVector;
   typedef std::vector<SPIRVVariable *> SPIRVVariableVec;
   typedef std::vector<SPIRVString *> SPIRVStringVec;
@@ -318,6 +322,7 @@ private:
   typedef std::unordered_map<std::string, SPIRVString*> SPIRVStringMap;
 
   SPIRVTypeVec TypeVec;
+  SPIRVForwardPointerVec ForwardPointerVec;
   SPIRVIdToEntryMap IdEntryMap;
   SPIRVFunctionVector FuncVec;
   SPIRVConstantVector ConstVec;
@@ -664,12 +669,17 @@ SPIRVModuleImpl::addOpaqueType(const std::string& Name) {
 }
 
 SPIRVTypeStruct*
-SPIRVModuleImpl::addStructType(const std::vector<SPIRVType*> &MemberTypes,
-    const std::string &Name, bool Packed) {
+SPIRVModuleImpl::openStructType(
+    const std::vector<SPIRVType*> &MemberTypes,
+    const std::string &Name) {
   auto T = new SPIRVTypeStruct(this, getId(), MemberTypes, Name);
-  addType(T);
-  T->setPacked(Packed);
   return T;
+}
+
+void SPIRVModuleImpl::closeStructType(SPIRVTypeStruct *T, bool Packed)
+{
+    addType(T);
+    T->setPacked(Packed);
 }
 
 SPIRVTypeVector*
@@ -707,6 +717,41 @@ SPIRVModuleImpl::addSamplerType() {
 SPIRVTypeSampledImage *
 SPIRVModuleImpl::addSampledImageType(SPIRVTypeImage *T) {
   return addType(new SPIRVTypeSampledImage(this, getId(), T));
+}
+
+void SPIRVModuleImpl::createForwardPointers()
+{
+    std::unordered_set<SPIRVId> seen;
+
+    for (auto *T : TypeVec)
+    {
+        if (T->hasId())
+        {
+            seen.insert(T->getId());
+        }
+
+        if (T->isTypeStruct())
+        {
+            auto *ST = static_cast<SPIRVTypeStruct*>(T);
+
+            for (unsigned i = 0; i < ST->getStructMemberCount(); i++)
+            {
+                auto *pMember = ST->getStructMemberType(i);
+                if (pMember->isTypePointer())
+                {
+                    auto *pPtr = static_cast<SPIRVTypePointer*>(pMember);
+                    bool found = seen.find(pPtr->getId()) != seen.end();
+
+                    if (!found)
+                    {
+                        ForwardPointerVec.push_back(new SPIRVTypeForwardPointer(
+                            this, pPtr, pPtr->getPointerStorageClass()));
+                    }
+                }
+            }
+
+        }
+    }
 }
 
 SPIRVFunction *
@@ -1134,6 +1179,7 @@ operator<< (spv_ostream &O, SPIRVModule &M) {
     << MI.DecGroupVec
     << MI.DecorateSet
     << MI.GroupDecVec
+    << MI.ForwardPointerVec
     << MI.TypeVec
     << MI.ConstVec
     << MI.VariableVec

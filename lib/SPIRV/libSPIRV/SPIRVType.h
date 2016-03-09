@@ -485,6 +485,9 @@ public:
 
   SPIRVWord getMemberCount() const { return MemberTypeVec.size();}
   SPIRVType *getMemberType(size_t I) const { return MemberTypeVec[I];}
+  void updateMembers(const std::vector<SPIRVType *>& newMembers) {
+      MemberTypeVec = newMembers;
+  }
   bool isPacked() const;
   void setPacked(bool Packed);
 
@@ -493,8 +496,6 @@ protected:
   void setWordCount(SPIRVWord WordCount) { MemberTypeVec.resize(WordCount - 2);}
   void validate()const {
     SPIRVEntry::validate();
-    for (auto T:MemberTypeVec)
-      T->validate();
   }
 private:
   std::vector<SPIRVType *> MemberTypeVec;      // Member Types

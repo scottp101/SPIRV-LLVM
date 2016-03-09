@@ -63,6 +63,7 @@ class SPIRVMemberDecorate;
 class SPIRVLine;
 class SPIRVString;
 class SPIRVExtInst;
+class SPIRVTypePointer;
 
 // Add declaration of encode/decode functions to a class.
 // Used inside class definition.
@@ -629,6 +630,20 @@ private:
   SPIRVCapabilityKind Kind;
 };
 
+class SPIRVTypeForwardPointer : public SPIRVEntryNoId<OpTypeForwardPointer> {
+public:
+    SPIRVTypeForwardPointer(
+        SPIRVModule *M,
+        SPIRVTypePointer *Pointer,
+        SPIRVStorageClassKind SC);
+    SPIRVTypeForwardPointer():
+        m_Pointer(nullptr), m_SC(StorageClassUniformConstant) {}
+    _SPIRV_DCL_ENCDEC
+private:
+    SPIRVTypePointer *m_Pointer;
+    SPIRVStorageClassKind m_SC;
+};
+
 template<class T>
 T* bcast(SPIRVEntry *E) {
   return static_cast<T*>(E);
@@ -643,7 +658,6 @@ _SPIRV_OP(Nop)
 _SPIRV_OP(SourceContinued, 2)
 _SPIRV_OP(TypeMatrix)
 _SPIRV_OP(TypeRuntimeArray)
-_SPIRV_OP(TypeForwardPointer, 39)
 _SPIRV_OP(SpecConstantTrue)
 _SPIRV_OP(SpecConstantFalse)
 _SPIRV_OP(SpecConstant)

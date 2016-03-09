@@ -174,6 +174,7 @@ public:
     DbgTran.setModule(M);
     assert(BM && "SPIR-V module not initialized");
     translate();
+    BM->createForwardPointers();
     return true;
   }
 
@@ -227,6 +228,8 @@ private:
   SPIRVWord SrcLang;
   SPIRVWord SrcLangVer;
   LLVMToSPIRVDbgTran DbgTran;
+
+  bool recursiveType(const StructType *ST, const Type *pTy);
 
   SPIRVType *mapType(Type *T, SPIRVType *BT) {
     TypeMap[T] = BT;
@@ -502,11 +505,37 @@ LLVMToSPIRV::transType(Type *T) {
     assert(ST->isSized());
     std::vector<SPIRVType *> MT;
     for (unsigned I = 0, E = T->getStructNumElements(); I != E; ++I)
-      MT.push_back(transType(ST->getElementType(I)));
+      MT.push_back(nullptr);
+
     std::string Name;
     if (ST->hasName())
       Name = ST->getName();
-    return mapType(T, BM->addStructType(MT, Name, ST->isPacked()));
+    auto *pStruct = BM->openStructType(MT, Name);
+    mapType(T, pStruct);
+
+    SmallVector<unsigned, 4> before;
+    SmallVector<unsigned, 4> after;
+
+    for (unsigned I = 0, E = T->getStructNumElements(); I != E; ++I)
+    {
+        auto *pElemTy = ST->getElementType(I);
+        if (isa<PointerType>(pElemTy) && recursiveType(ST, pElemTy))
+            after.push_back(I);
+        else
+            before.push_back(I);
+    }
+
+    for (auto I : before)
+        MT[I] = transType(ST->getElementType(I));
+
+    BM->closeStructType(pStruct, ST->isPacked());
+
+    for (auto I : after)
+        MT[I] = transType(ST->getElementType(I));
+
+    pStruct->updateMembers(MT);
+
+    return pStruct;
   }
 
   if (FunctionType *FT = dyn_cast<FunctionType>(T)) {
@@ -520,6 +549,47 @@ LLVMToSPIRV::transType(Type *T) {
 
   llvm_unreachable("Not implemented!");
   return 0;
+}
+
+bool LLVMToSPIRV::recursiveType(const StructType *ST, const Type *pTy)
+{
+    SmallPtrSet<const StructType*, 4> seen;
+
+    std::function<bool(const Type *pTy)> run = [&](const Type *pTy)
+    {
+        if (!isa<CompositeType>(pTy))
+            return false;
+
+        if (auto *pStructTy = dyn_cast<StructType>(pTy))
+        {
+            if (pStructTy == ST)
+                return true;
+
+            if (seen.count(pStructTy))
+                return false;
+
+            seen.insert(pStructTy);
+        }
+
+        if (auto *pPtrTy = dyn_cast<PointerType>(pTy))
+            return run(pPtrTy->getPointerElementType());
+        else if (auto *pArrayTy = dyn_cast<ArrayType>(pTy))
+            return run(pArrayTy->getArrayElementType());
+        else if (auto *pStructTy = dyn_cast<StructType>(pTy))
+        {
+            for (auto *pElemTy : pStructTy->elements())
+            {
+                if (run(pElemTy))
+                    return true;
+            }
+
+            return false;
+        }
+
+        return false;
+    };
+
+    return run(pTy);
 }
 
 SPIRVFunction *
