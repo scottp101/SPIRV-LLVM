@@ -337,6 +337,7 @@ private:
   SPIRVCapSet CapSet;
   std::map<unsigned, SPIRVTypeInt*> IntTypeMap;
   std::map<unsigned, SPIRVConstant*> LiteralMap;
+  SPIRVTypeSampler* SamplerType = nullptr;
 
   void layoutEntry(SPIRVEntry* Entry);
 };
@@ -701,7 +702,12 @@ SPIRVModuleImpl::addImageType(SPIRVType *SampledType,
 
 SPIRVTypeSampler *
 SPIRVModuleImpl::addSamplerType() {
-  return addType(new SPIRVTypeSampler(this, getId()));
+    if (SamplerType == NULL){
+        SamplerType = new SPIRVTypeSampler(this, getId());
+        return addType(SamplerType);
+    }
+    else
+        return SamplerType;
 }
 
 SPIRVTypeSampledImage *

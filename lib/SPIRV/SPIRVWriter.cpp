@@ -501,8 +501,13 @@ LLVMToSPIRV::transType(Type *T) {
   if (auto ST = dyn_cast<StructType>(T)) {
     assert(ST->isSized());
     std::vector<SPIRVType *> MT;
+    if (ST->hasName())
+    {
+      if (T->getStructName() == kSPR2TypeName::Sampler)
+        return mapType(T, BM->addSamplerType());
+    }
     for (unsigned I = 0, E = T->getStructNumElements(); I != E; ++I)
-      MT.push_back(transType(ST->getElementType(I)));
+        MT.push_back(transType(ST->getElementType(I)));
     std::string Name;
     if (ST->hasName())
       Name = ST->getName();
@@ -633,7 +638,15 @@ LLVMToSPIRV::transConstant(Value *V) {
     std::vector<SPIRVValue *> BV;
     for (auto I = ConstV->op_begin(), E = ConstV->op_end(); I != E; ++I)
       BV.push_back(transValue(*I, nullptr));
-    return BM->addCompositeConstant(transType(V->getType()), BV);
+    if (ConstV->getType()->hasName() && ConstV->getType()->getName() == kSPR2TypeName::Sampler){
+        auto SamplerValue = cast<ConstantInt>(ConstV->getOperand(0))->getZExtValue();
+        auto AddrMode = (SamplerValue & 0xE) >> 1;
+        auto Param = SamplerValue & 0x1;
+        auto Filter = ((SamplerValue & 0x30) >> 4) - 1;
+        return BM->addSamplerConstant(BM->addSamplerType(), AddrMode, Param, Filter);
+    }
+    else
+      return BM->addCompositeConstant(transType(V->getType()), BV);
   }
 
   if (auto ConstUE = dyn_cast<ConstantExpr>(V)) {
@@ -963,10 +976,10 @@ LLVMToSPIRV::oclIsSamplerType(llvm::Type* T) {
   auto ST = dyn_cast<StructType>(PT->getElementType());
   if (!ST)
     return false;
-  bool isSampler =
-      ST->isOpaque() && ST->getStructName() == kSPR2TypeName::Sampler;
+  bool isSampler = (ST->getStructName() == kSPR2TypeName::Sampler);
   return isSampler;
 }
+
 
 /// Transform sampler* spcv.cast(i32 arg)
 /// Only two cases are possible:
@@ -981,34 +994,42 @@ LLVMToSPIRV::oclTransSpvcCastSampler(CallInst* CI, SPIRVBasicBlock *BB) {
   assert(FT->getNumParams() == 1);
   auto ArgT = FT->getParamType(0);
   bool isSampler = oclIsSamplerType(RT);
-  assert(isSampler && ArgT->isIntegerTy());
+  assert(isSampler && oclIsSamplerType(ArgT));
   auto Arg = CI->getArgOperand(0);
 
   auto GetSamplerConstant = [&](uint64_t SamplerValue) {
     auto AddrMode = (SamplerValue & 0xE) >> 1;
     auto Param = SamplerValue & 0x1;
     auto Filter = ((SamplerValue & 0x30) >> 4) - 1;
-    auto BV = BM->addSamplerConstant(transType(RT), AddrMode, Param, Filter);
+    auto BV = BM->addSamplerConstant(BM->addSamplerType(), AddrMode, Param, Filter);
     return BV;
   };
 
-  if (auto Const = dyn_cast<ConstantInt>(Arg)) {
-    return GetSamplerConstant(Const->getZExtValue());
-  }
+  if (auto Const = dyn_cast<ConstantStruct>(Arg)) {
+    auto ConstInt = cast<ConstantInt>(Const->getOperand(0));
+    return GetSamplerConstant(ConstInt->getZExtValue());
+  }/*
+  else if (auto GV = dyn_cast<GlobalVariable>(Arg)){
+    auto Const = cast<ConstantStruct>(GV->getInitializer());
+    auto Initializer = Const->getOperand(0);
+    assert(isa<ConstantInt>(Initializer) && "sampler not constant int?");
+    return GetSamplerConstant(cast<ConstantInt>(Initializer)->getZExtValue());
+  }*/
   else if (auto Load = dyn_cast<LoadInst>(Arg)) {
     auto Op = Load->getPointerOperand();
     assert(isa<GlobalVariable>(Op) && "Unknown sampler pattern!");
     auto GV = cast<GlobalVariable>(Op);
     assert(GV->isConstant() ||
       GV->getType()->getPointerAddressSpace() == SPIRAS_Constant);
-    auto Initializer = GV->getInitializer();
+    auto Const = cast<ConstantStruct>(GV->getInitializer());
+    auto Initializer = Const->getOperand(0);
     assert(isa<ConstantInt>(Initializer) && "sampler not constant int?");
 
     return GetSamplerConstant(cast<ConstantInt>(Initializer)->getZExtValue());
   }
 
   auto BV = transValue(Arg, BB);
-  assert(BV && BV->getType() == transType(RT));
+  //assert(BV && BV->getType() == transType(RT));
   return BV;
 }
 
