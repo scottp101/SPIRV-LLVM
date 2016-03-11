@@ -503,39 +503,30 @@ LLVMToSPIRV::transType(Type *T) {
 
   if (auto ST = dyn_cast<StructType>(T)) {
     assert(ST->isSized());
-    std::vector<SPIRVType *> MT;
-    for (unsigned I = 0, E = T->getStructNumElements(); I != E; ++I)
-      MT.push_back(nullptr);
 
     std::string Name;
     if (ST->hasName())
       Name = ST->getName();
-    auto *pStruct = BM->openStructType(MT, Name);
-    mapType(T, pStruct);
+    auto *Struct = BM->openStructType(T->getStructNumElements(), Name);
+    mapType(T, Struct);
 
-    SmallVector<unsigned, 4> before;
-    SmallVector<unsigned, 4> after;
+    SmallVector<unsigned, 4> After;
 
     for (unsigned I = 0, E = T->getStructNumElements(); I != E; ++I)
     {
-        auto *pElemTy = ST->getElementType(I);
-        if (isa<PointerType>(pElemTy) && recursiveType(ST, pElemTy))
-            after.push_back(I);
+        auto *ElemTy = ST->getElementType(I);
+        if (isa<PointerType>(ElemTy) && recursiveType(ST, ElemTy))
+            After.push_back(I);
         else
-            before.push_back(I);
+            Struct->setMemberType(I, transType(ST->getElementType(I)));
     }
 
-    for (auto I : before)
-        MT[I] = transType(ST->getElementType(I));
+    BM->closeStructType(Struct, ST->isPacked());
 
-    BM->closeStructType(pStruct, ST->isPacked());
+    for (auto I : After)
+        Struct->setMemberType(I, transType(ST->getElementType(I)));
 
-    for (auto I : after)
-        MT[I] = transType(ST->getElementType(I));
-
-    pStruct->updateMembers(MT);
-
-    return pStruct;
+    return Struct;
   }
 
   if (FunctionType *FT = dyn_cast<FunctionType>(T)) {
@@ -551,35 +542,35 @@ LLVMToSPIRV::transType(Type *T) {
   return 0;
 }
 
-bool LLVMToSPIRV::recursiveType(const StructType *ST, const Type *pTy)
+bool LLVMToSPIRV::recursiveType(const StructType *ST, const Type *Ty)
 {
-    SmallPtrSet<const StructType*, 4> seen;
+    SmallPtrSet<const StructType*, 4> Seen;
 
-    std::function<bool(const Type *pTy)> run = [&](const Type *pTy)
+    std::function<bool(const Type *)> run = [&](const Type *Ty)
     {
-        if (!isa<CompositeType>(pTy))
+        if (!isa<CompositeType>(Ty))
             return false;
 
-        if (auto *pStructTy = dyn_cast<StructType>(pTy))
+        if (auto *StructTy = dyn_cast<StructType>(Ty))
         {
-            if (pStructTy == ST)
+            if (StructTy == ST)
                 return true;
 
-            if (seen.count(pStructTy))
+            if (Seen.count(StructTy))
                 return false;
 
-            seen.insert(pStructTy);
+            Seen.insert(StructTy);
         }
 
-        if (auto *pPtrTy = dyn_cast<PointerType>(pTy))
-            return run(pPtrTy->getPointerElementType());
-        else if (auto *pArrayTy = dyn_cast<ArrayType>(pTy))
-            return run(pArrayTy->getArrayElementType());
-        else if (auto *pStructTy = dyn_cast<StructType>(pTy))
+        if (auto *PtrTy = dyn_cast<PointerType>(Ty))
+            return run(PtrTy->getPointerElementType());
+        else if (auto *ArrayTy = dyn_cast<ArrayType>(Ty))
+            return run(ArrayTy->getArrayElementType());
+        else if (auto *StructTy = dyn_cast<StructType>(Ty))
         {
-            for (auto *pElemTy : pStructTy->elements())
+            for (auto *ElemTy : StructTy->elements())
             {
-                if (run(pElemTy))
+                if (run(ElemTy))
                     return true;
             }
 
@@ -589,7 +580,7 @@ bool LLVMToSPIRV::recursiveType(const StructType *ST, const Type *pTy)
         return false;
     };
 
-    return run(pTy);
+    return run(Ty);
 }
 
 SPIRVFunction *

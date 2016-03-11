@@ -189,9 +189,7 @@ public:
       const SPIRVTypeImageDescriptor &, SPIRVAccessQualifierKind);
   virtual SPIRVTypeSampler *addSamplerType();
   virtual SPIRVTypeSampledImage *addSampledImageType(SPIRVTypeImage *T);
-  virtual SPIRVTypeStruct *openStructType(
-      const std::vector<SPIRVType *>&,
-      const std::string &);
+  virtual SPIRVTypeStruct *openStructType(unsigned, const std::string &);
   virtual void closeStructType(SPIRVTypeStruct *T, bool);
   virtual SPIRVTypeVector *addVectorType(SPIRVType *, SPIRVWord);
   virtual SPIRVType *addOpaqueGenericType(Op);
@@ -669,10 +667,8 @@ SPIRVModuleImpl::addOpaqueType(const std::string& Name) {
 }
 
 SPIRVTypeStruct*
-SPIRVModuleImpl::openStructType(
-    const std::vector<SPIRVType*> &MemberTypes,
-    const std::string &Name) {
-  auto T = new SPIRVTypeStruct(this, getId(), MemberTypes, Name);
+SPIRVModuleImpl::openStructType(unsigned NumMembers, const std::string &Name) {
+  auto T = new SPIRVTypeStruct(this, getId(), NumMembers, Name);
   return T;
 }
 
@@ -721,13 +717,13 @@ SPIRVModuleImpl::addSampledImageType(SPIRVTypeImage *T) {
 
 void SPIRVModuleImpl::createForwardPointers()
 {
-    std::unordered_set<SPIRVId> seen;
+    std::unordered_set<SPIRVId> Seen;
 
     for (auto *T : TypeVec)
     {
         if (T->hasId())
         {
-            seen.insert(T->getId());
+            Seen.insert(T->getId());
         }
 
         if (T->isTypeStruct())
@@ -736,16 +732,16 @@ void SPIRVModuleImpl::createForwardPointers()
 
             for (unsigned i = 0; i < ST->getStructMemberCount(); i++)
             {
-                auto *pMember = ST->getStructMemberType(i);
-                if (pMember->isTypePointer())
+                auto *Member = ST->getStructMemberType(i);
+                if (Member->isTypePointer())
                 {
-                    auto *pPtr = static_cast<SPIRVTypePointer*>(pMember);
-                    bool found = seen.find(pPtr->getId()) != seen.end();
+                    auto *Ptr = static_cast<SPIRVTypePointer*>(Member);
+                    bool Found = Seen.find(Ptr->getId()) != Seen.end();
 
-                    if (!found)
+                    if (!Found)
                     {
                         ForwardPointerVec.push_back(new SPIRVTypeForwardPointer(
-                            this, pPtr, pPtr->getPointerStorageClass()));
+                            this, Ptr, Ptr->getPointerStorageClass()));
                     }
                 }
             }
