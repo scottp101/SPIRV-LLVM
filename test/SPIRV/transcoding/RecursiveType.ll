@@ -17,36 +17,6 @@ target triple = "spir-unknown-unknown"
 
 ; Function Attrs: nounwind
 define spir_kernel void @listSum(i32 addrspace(1)* %result, %struct.Node addrspace(1)* %node) #0 {
-  %1 = alloca i32 addrspace(1)*, align 4
-  %2 = alloca %struct.Node addrspace(1)*, align 4
-  %sum = alloca i32, align 4
-  store i32 addrspace(1)* %result, i32 addrspace(1)** %1, align 4
-  store %struct.Node addrspace(1)* %node, %struct.Node addrspace(1)** %2, align 4
-  store i32 0, i32* %sum, align 4
-  br label %3
-
-; <label>:3                                       ; preds = %6, %0
-  %4 = load %struct.Node addrspace(1)** %2, align 4
-  %5 = icmp ne %struct.Node addrspace(1)* %4, null
-  br i1 %5, label %6, label %15
-
-; <label>:6                                       ; preds = %3
-  %7 = load %struct.Node addrspace(1)** %2, align 4
-  %8 = getelementptr inbounds %struct.Node addrspace(1)* %7, i32 0, i32 1
-  %9 = load i32 addrspace(1)* %8, align 4
-  %10 = load i32* %sum, align 4
-  %11 = add i32 %10, %9
-  store i32 %11, i32* %sum, align 4
-  %12 = load %struct.Node addrspace(1)** %2, align 4
-  %13 = getelementptr inbounds %struct.Node addrspace(1)* %12, i32 0, i32 0
-  %14 = load %struct.Node addrspace(1)* addrspace(1)* %13, align 4
-  store %struct.Node addrspace(1)* %14, %struct.Node addrspace(1)** %2, align 4
-  br label %3
-
-; <label>:15                                      ; preds = %3
-  %16 = load i32* %sum, align 4
-  %17 = load i32 addrspace(1)** %1, align 4
-  store i32 %16, i32 addrspace(1)* %17, align 4
   ret void
 }
 
@@ -72,3 +42,4 @@ attributes #0 = { nounwind "less-precise-fpmad"="true" "no-frame-pointer-elim"="
 !8 = !{i32 2, i32 0}
 !9 = !{}
 !10 = !{!"clang version 3.6.1 "}
+
