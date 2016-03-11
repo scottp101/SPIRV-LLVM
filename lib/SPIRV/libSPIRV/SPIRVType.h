@@ -476,15 +476,23 @@ public:
   SPIRVTypeStruct(SPIRVModule *M, SPIRVId TheId,
       const std::vector<SPIRVType *> &TheMemberTypes, const std::string &TheName)
     :SPIRVType(M, 2 + TheMemberTypes.size(), OpTypeStruct, TheId),
-     MemberTypeVec(TheMemberTypes){
+     MemberTypeVec(TheMemberTypes) {
     Name = TheName;
     validate();
+  }
+  SPIRVTypeStruct(SPIRVModule *M, SPIRVId TheId,
+      unsigned NumMembers, const std::string &TheName)
+    : SPIRVType(M, 2 + NumMembers, OpTypeStruct, TheId) {
+    Name = TheName;
+    validate();
+    setWordCount(WordCount);
   }
   // Incomplete constructor
   SPIRVTypeStruct():SPIRVType(OpTypeStruct){}
 
   SPIRVWord getMemberCount() const { return MemberTypeVec.size();}
   SPIRVType *getMemberType(size_t I) const { return MemberTypeVec[I];}
+  void setMemberType(size_t I, SPIRVType* Ty) { MemberTypeVec[I] = Ty; }
   bool isPacked() const;
   void setPacked(bool Packed);
 
@@ -493,8 +501,6 @@ protected:
   void setWordCount(SPIRVWord WordCount) { MemberTypeVec.resize(WordCount - 2);}
   void validate()const {
     SPIRVEntry::validate();
-    for (auto T:MemberTypeVec)
-      T->validate();
   }
 private:
   std::vector<SPIRVType *> MemberTypeVec;      // Member Types

@@ -616,5 +616,15 @@ SPIRVCapability::decode(std::istream &I) {
   Module->addCapability(Kind);
 }
 
+SPIRVTypeForwardPointer::SPIRVTypeForwardPointer(
+    SPIRVModule *M,
+    SPIRVTypePointer *Pointer,
+    SPIRVStorageClassKind SC)
+  : SPIRVEntryNoId(M, 3), m_Pointer(Pointer), m_SC(SC)
+{
+}
+
+_SPIRV_IMP_ENCDEC2(SPIRVTypeForwardPointer, m_Pointer, m_SC)
+
 } // namespace SPIRV
 

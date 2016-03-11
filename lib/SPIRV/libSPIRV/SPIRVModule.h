@@ -189,12 +189,13 @@ public:
   virtual SPIRVTypeInt *addIntegerType(unsigned) = 0;
   virtual SPIRVTypeOpaque *addOpaqueType(const std::string &) = 0;
   virtual SPIRVTypePointer *addPointerType(SPIRVStorageClassKind, SPIRVType *) = 0;
-  virtual SPIRVTypeStruct *addStructType(const std::vector<SPIRVType *> &,
-      const std::string &, bool) = 0;
+  virtual SPIRVTypeStruct *openStructType(unsigned, const std::string &) = 0;
+  virtual void closeStructType(SPIRVTypeStruct *, bool) = 0;
   virtual SPIRVTypeVector *addVectorType(SPIRVType *, SPIRVWord) = 0;
   virtual SPIRVTypeVoid *addVoidType() = 0;
   virtual SPIRVType *addOpaqueGenericType(Op) = 0;
   virtual SPIRVTypePipe *addPipeType() = 0;
+  virtual void createForwardPointers() = 0;
 
   // Constants creation functions
   virtual SPIRVValue *addCompositeConstant(SPIRVType *,

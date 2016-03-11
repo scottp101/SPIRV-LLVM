@@ -174,6 +174,7 @@ public:
     DbgTran.setModule(M);
     assert(BM && "SPIR-V module not initialized");
     translate();
+    BM->createForwardPointers();
     return true;
   }
 
@@ -227,6 +228,8 @@ private:
   SPIRVWord SrcLang;
   SPIRVWord SrcLangVer;
   LLVMToSPIRVDbgTran DbgTran;
+
+  bool recursiveType(const StructType *ST, const Type *pTy);
 
   SPIRVType *mapType(Type *T, SPIRVType *BT) {
     TypeMap[T] = BT;
@@ -511,7 +514,26 @@ LLVMToSPIRV::transType(Type *T) {
     std::string Name;
     if (ST->hasName())
       Name = ST->getName();
-    return mapType(T, BM->addStructType(MT, Name, ST->isPacked()));
+    auto *Struct = BM->openStructType(T->getStructNumElements(), Name);
+    mapType(T, Struct);
+
+    SmallVector<unsigned, 4> After;
+
+    for (unsigned I = 0, E = T->getStructNumElements(); I != E; ++I)
+    {
+        auto *ElemTy = ST->getElementType(I);
+        if (isa<PointerType>(ElemTy) && recursiveType(ST, ElemTy))
+            After.push_back(I);
+        else
+            Struct->setMemberType(I, transType(ST->getElementType(I)));
+    }
+
+    BM->closeStructType(Struct, ST->isPacked());
+
+    for (auto I : After)
+        Struct->setMemberType(I, transType(ST->getElementType(I)));
+
+    return Struct;
   }
 
   if (FunctionType *FT = dyn_cast<FunctionType>(T)) {
@@ -525,6 +547,47 @@ LLVMToSPIRV::transType(Type *T) {
 
   llvm_unreachable("Not implemented!");
   return 0;
+}
+
+bool LLVMToSPIRV::recursiveType(const StructType *ST, const Type *Ty)
+{
+    SmallPtrSet<const StructType*, 4> Seen;
+
+    std::function<bool(const Type *)> run = [&](const Type *Ty)
+    {
+        if (!isa<CompositeType>(Ty))
+            return false;
+
+        if (auto *StructTy = dyn_cast<StructType>(Ty))
+        {
+            if (StructTy == ST)
+                return true;
+
+            if (Seen.count(StructTy))
+                return false;
+
+            Seen.insert(StructTy);
+        }
+
+        if (auto *PtrTy = dyn_cast<PointerType>(Ty))
+            return run(PtrTy->getPointerElementType());
+        else if (auto *ArrayTy = dyn_cast<ArrayType>(Ty))
+            return run(ArrayTy->getArrayElementType());
+        else if (auto *StructTy = dyn_cast<StructType>(Ty))
+        {
+            for (auto *ElemTy : StructTy->elements())
+            {
+                if (run(ElemTy))
+                    return true;
+            }
+
+            return false;
+        }
+
+        return false;
+    };
+
+    return run(Ty);
 }
 
 SPIRVFunction *
