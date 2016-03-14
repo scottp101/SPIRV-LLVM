@@ -75,6 +75,7 @@ private:
   MDNode *getKernelMetadata(Function *F);
   void adaptArgumentsByMetadata(Function* F);
   void adaptArgumentsBySamplerUse(Module &M);
+  void cleanupGlobalSamplers(Module &M);
   void adaptFunction(Function *F);
   void addAdaptedType(Value *V, Type *T);
   void addWork(Function *F);

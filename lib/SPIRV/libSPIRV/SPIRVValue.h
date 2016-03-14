@@ -331,7 +331,7 @@ protected:
     SPIRVValue::validate();
     assert(OpCode == OC);
     assert(WordCount == WC);
-    //assert(Type->isTypeSampler());
+    assert(Type->isTypeSampler());
   }
   _SPIRV_DEF_ENCDEC5(Type, Id, AddrMode, Normalized, FilterMode)
 };

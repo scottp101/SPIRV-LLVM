@@ -76,6 +76,7 @@ OCLTypeToSPIRV::runOnModule(Module& Module) {
   if (std::get<0>(Src) != spv::SourceLanguageOpenCL_C)
     return false;
 
+  cleanupGlobalSamplers(Module);
   for (auto &F:Module.functions())
     adaptArgumentsByMetadata(&F);
 
@@ -278,6 +279,40 @@ void OCLTypeToSPIRV::adaptArgumentsBySamplerUse(Module &M)
         }
     }
 }
+
+
+void OCLTypeToSPIRV::cleanupGlobalSamplers(Module &M) {
+    std::function<void(Function*)> TraceArg = [&](Function *F){
+    
+        for (auto U : F->users())
+        {
+            if (auto *CI = dyn_cast<CallInst>(U))
+            {
+                auto SamplerArg = CI->getArgOperand(1);
+                if (LoadInst* SamplerLoad = dyn_cast<LoadInst>(SamplerArg)) {
+                    if (BitCastInst* Bitcast = cast<BitCastInst>(SamplerLoad->getPointerOperand()))
+                        if (GlobalVariable* GlobalSampler = cast<GlobalVariable>(Bitcast->getOperand(0)))
+                            SamplerArg->replaceAllUsesWith(GlobalSampler);
+                }
+            }
+        }
+    
+    };
+        
+    for (auto &F : M)
+    {
+        auto MangledName = F.getName();
+        std::string DemangledName;
+        if (!oclIsBuiltin(MangledName, 12, &DemangledName, false))
+            continue;
+
+        if (DemangledName.find(kSPIRVName::SampledImage) == std::string::npos)
+            continue;
+
+        TraceArg(&F);
+    }
+}
+
 
 void
 OCLTypeToSPIRV::adaptArgumentsByMetadata(Function* F) {
